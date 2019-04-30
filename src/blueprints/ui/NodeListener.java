@@ -9,10 +9,8 @@ package blueprints.ui;
  *
  * @author terro
  */
-public interface Node<T>{
+public interface NodeListener {
     
-    public void setValue(T value);
-        
-    public T getValue();
+    public void Recived(BPNode node, Object newValue, Object oldValue);
     
 }
