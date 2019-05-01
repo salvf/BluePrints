@@ -137,7 +137,7 @@ public class BarTool extends javax.swing.JPanel implements Observer{
         Thread t;
         int selected=cb.getSelectedIndex();
         if(selected>=0){
-          comp= Main.bluePrintDesktop.getManager().remove(selected); 
+          comp= Main.bluePrintView.getManager().remove(selected); 
           t=Main.threadescritor.get(comp[0].getName());
           if(t!=null){
               Main.EscritorBP escritor=(Main.EscritorBP)comp[0];
