@@ -9,9 +9,7 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.ArrayList;
-import java.util.List;
-import javafx.beans.property.SimpleObjectProperty;
+import java.util.HashMap;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -21,8 +19,8 @@ import javax.swing.Timer;
  * @author terro
  */
 public class BPComponent extends JPanel{
-        private final List<BPNode> input = new ArrayList<>(1);
-        private final List<BPNode> output = new ArrayList<>(1);
+        private final HashMap<String,BPNode> input = new HashMap<>();
+        private final HashMap<String,BPNode> output = new HashMap<>();
         private final String name;
         private Timer timer;
         private final Color bckgrd;
@@ -135,35 +133,34 @@ public class BPComponent extends JPanel{
             this.connected=connected;
         } 
 
-        public void addInputNode(String type){
-            input.add(new BPNode(type));
+        public void addNode(String id,BPNode node){
+            if(node.isInput())
+                input.put(id,node);
+            else 
+                output.put(id,node);
+        }
+        
+        public Object getOutputValue(String nodeid){
+            return output.get(nodeid).getValue();
+        }
+        
+        public void setOutputValue(String nodeid,Object value){
+            output.get(nodeid).setValue(value);
+        }
+        
+        public Object getInputValue(String nodeid){
+            return input.get(nodeid).getValue();
+        }
+        
+        public void setInputValue(String nodeid,Object value){
+            input.get(nodeid).setValue(value);
         }
 
-        public void addOutputNode(String type) {
-            output.add(new BPNode(type));
-        }
-        
-        public Object getOutputValue(){
-            return output.get(0).getValue();
-        }
-        
-        public void setOutputValue(String value){
-            output.get(0).setValue((Object) value);
-        }
-        
-        public Object getInputValue(){
-            return input.get(0).getValue();
-        }
-        
-        public void setInputValue(Object value){
-            input.get(0).setValue(value);
-        }
-
-        public List<BPNode> getInputNodes() {
+        public HashMap<String,BPNode> getInputNodes() {
            return input;
         }
 
-        public List<BPNode> getOutputNodes() {
+        public HashMap<String,BPNode> getOutputNodes() {
             return output;
         }
         
