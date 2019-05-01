@@ -26,6 +26,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.GeneralPath;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Observer;
 import javax.swing.JComponent;
@@ -174,11 +175,11 @@ public class BPViewport extends JLayeredPane {
         }
         
         private boolean inInputNode(MouseEvent e){
-            return nodesin.stream().anyMatch((node)->(node.contains(e.getPoint())));
+            return nodesin.stream().parallel().anyMatch((node)->(node.contains(e.getPoint())));
         }
         
         private boolean inOutputNode(MouseEvent e){
-            return nodesout.stream().anyMatch((node)->(node.contains(e.getPoint())));
+            return nodesout.stream().parallel().anyMatch((node)->(node.contains(e.getPoint())));
         }
         
         private BPComponent getBluePrintComponent(MouseEvent e, boolean isInput){
@@ -236,7 +237,35 @@ public class BPViewport extends JLayeredPane {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             nodesin.clear();
             nodesout.clear();
-            for(Component comp:getComponents()){
+            
+            dek_manager.getConnections().stream().parallel().map((connection) -> {
+                Rectangle innerparent = connection[0].getBounds();
+                Rectangle innerchild = connection[1].getBounds();
+                GeneralPath path = new GeneralPath();
+                double Xcenter=(innerparent.getCenterX()+innerchild.getCenterX())/2;
+                double Xout = innerparent.getX()+innerparent.getWidth()+20;
+                double Xin = innerchild.getX() - 20;
+                double xs[]={Xout,Xcenter,Xcenter,Xin};
+                double ys[]={innerparent.getCenterY(),innerchild.getCenterY()};
+                path.moveTo(xs[0], ys[0]);
+                
+                if( xs[0] <= xs[3] || xs[3] > xs[0]){
+                    xs[1]=Xcenter;
+                    xs[2]=xs[1];
+                }
+                else{
+                    xs[1]=(xs[0]-Xcenter)+xs[0];
+                    xs[2]=(xs[3]-Xcenter)+xs[3];
+                }
+                path.curveTo(xs[1], ys[0], xs[2], ys[1], xs[3], ys[1]);
+                return path;
+            }).forEachOrdered((path) -> {
+                g2d.setColor(new Color(41,200,114));
+                g2d.setStroke(new BasicStroke(1.5f));
+                g2d.draw(path);
+            });
+            
+            Arrays.stream(getComponents()).parallel().forEachOrdered((comp) -> {
                 Rectangle bound = comp.getBounds();
                 BPComponent bpc =(BPComponent)comp;
                 if(bpc.isShadow())
@@ -248,35 +277,6 @@ public class BPViewport extends JLayeredPane {
                         drawCenteredCircle(g2d, (int)Xout, (int)bound.getCenterY(), 10, true);
                     if (bpc.getInputNodes().size() > 0)
                       drawCenteredCircle(g2d, (int) Xin, (int) bound.getCenterY(), 10, false);
-            }
-            
-            dek_manager.getConnections().stream().map((connection) -> {
-                Rectangle innerparent = connection[0].getBounds();
-                Rectangle innerchild = connection[1].getBounds();
-                GeneralPath path = new GeneralPath();
-                double Xcenter=(innerparent.getCenterX()+innerchild.getCenterX())/2;
-                double Xout = innerparent.getX()+innerparent.getWidth()+20;
-                double Xin = innerchild.getX() - 20;
-                path.moveTo(Xout, innerparent.getCenterY());
-                // xs = { 75, (int)(75+375)/2, (int)(75+375)/2, 375 };
-                // ys = { 400,       400,            80,         80 };
-                // path.curveTo(xs[1], ys[1], xs[2], ys[2], xs[3], ys[3]);
-                if( Xout+50 <= Xin || Xin > Xout +50)
-                    path.curveTo(Xcenter,innerparent.getCenterY() ,Xcenter, innerchild.getCenterY(), Xin, innerchild.getCenterY());
-                else
-                    path.curveTo(Xout+50, innerparent.getCenterY(), Xin-50, innerchild.getCenterY(), Xin, innerchild.getCenterY());
-                
-                LinearGradientPaint lpg = new LinearGradientPaint(
-                new Point((int)Xout, (int)innerparent.getCenterY()),
-                new Point((int)Xin, (int)innerchild.getCenterY() ),
-                new float[]{0.0f, 1.0f},
-                new Color[]{Color.GREEN, Color.red});
-                g2d.setPaint(lpg);
-                
-                return path;
-            }).forEachOrdered((path) -> {
-                g2d.setStroke(new BasicStroke(1.5f));
-                g2d.draw(path);
             });
             
             //if(drawLine){            }
