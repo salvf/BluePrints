@@ -4,7 +4,9 @@ package demo.Escritor_Lector;
 
 import blueprints.ui.BPComponent;
 import blueprints.ui.BPDesktop;
+import blueprints.ui.BPNode;
 import blueprints.ui.BPViewport;
+import blueprints.ui.NodeAdapter;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.event.ActionEvent;
@@ -58,14 +60,29 @@ public class Main {
 
             BarTool bar=new BarTool();
             bluePrintView.addObserver(bar);
-                    
-            biblioteca.addInputNode("ANY");
-            biblioteca.addOutputNode("ANY");
+            NodeAdapter na= new NodeAdapter() {
+                
+                public void OnChange(BPNode node, Object newValue, Object oldValue) {
+                    System.out.println("Node: "+node.getType()+" old: "+oldValue+" new: "+newValue);
+                }
+
+                public void OnRecive(BPNode sendernode, Object Value) {
+                    System.out.println("Node: "+sendernode.getType()+" new: "+Value);
+                }
             
-            biblioteca.setOutputValue("hola");
+            };        
+            biblioteca.addNode("in1",new BPNode<>(String.class,true));
+            biblioteca.addNode("out1",new BPNode<>(String.class,false));
             
-            //System.out.println(""+biblioteca.getOutputValue());
-            
+            biblioteca.getOutputNodes().forEach((key,cnsmr)->{
+                cnsmr.addOutputNodeListener(na);
+            });
+            try {
+                biblioteca.setOutputValue("out1","hola");
+            } catch (Exception e) {
+                System.err.println(e);
+            }
+                        
             JFrame frame = new JFrame("ESCRITOR LECTOR BluePrint Test");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setLayout(new BorderLayout());
@@ -92,7 +109,7 @@ public class Main {
             lector.addActionListener((ActionEvent e) -> {
                 LectorBP L1=new LectorBP("Lector "+lec);
                 L1.setBounds(x, y, 150, 40);
-                L1.addInputNode("ANY");
+                L1.addNode(L1.getName(),new BPNode(String.class,true));
                 int posix=threadlector.size();
                 threadlector.put(L1.getName(),new Thread(L1,L1.getName()));                
                 bluePrintView.add(L1);
@@ -103,7 +120,7 @@ public class Main {
             escritor.addActionListener((ActionEvent e) -> {
                 EscritorBP E1=new EscritorBP("Escritor "+esc);
                 E1.setBounds(x, y, 150, 40);
-                E1.addOutputNode("ANY");
+                E1.addNode(E1.getName(),new BPNode(String.class,false));
                 int posix=threadescritor.size();
                 threadescritor.put(E1.getName(),new Thread(E1,E1.getName()));
                 bluePrintView.add(E1);
