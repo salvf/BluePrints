@@ -1,73 +1,76 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * Copyright 2019 Salvador Vera Franco.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
 package blueprints;
 
-import blueprints.ui.BPComponent;
+import blueprints.ui.BPNode;
 import blueprints.ui.BPViewport;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Observable;
 
 /**
  *
- * @author terro
+ * @author Salvador Vera Franco
  */
 public abstract class BPManager {
  
-    public static class Desktop extends Observable{
-        private final List<BPComponent[]> connections;
-        private  BPViewport bluePrintDesktop;
+    public static class Viewport{
+        private final List<BPNode[]> connections;
+        private  BPViewport bpView;
         
-        public Desktop(ArrayList<BPComponent[]> initConnections) {
+        public Viewport(ArrayList<BPNode[]> initConnections) {
             this.connections=initConnections;
         }
         
         
-        public Desktop(ArrayList<BPComponent[]> initConnections, BPViewport desktop) {
+        public Viewport(ArrayList<BPNode[]> initConnections, BPViewport view) {
             this.connections=initConnections;
-            bluePrintDesktop = desktop;
+            bpView = view;
         }
         
-        public  BPViewport getBPDesktop(){
-            return bluePrintDesktop;
+        public  BPViewport getBPViewport(){
+            return bpView;
         }
         
-        public List<BPComponent[]> getConnections(){
+        public List<BPNode[]> getConnections(){
             return connections;
         }
         
-        public boolean add(BPComponent[] e){
+        public boolean add(BPNode[] e){
             boolean returnb =connections.add(e);
-            e[0].setConnection(true);
-            e[1].setConnection(true);
-            setChanged();
-            notifyObservers(connections);
+            e[0].setConnection(true,e[1]);
+            e[1].setConnection(true,e[0]);
             return returnb;
         }
         
-        public BPComponent[] remove(int index){
-            BPComponent[] returnb = connections.remove(index);
-            returnb[0].setConnection(false);
-            returnb[1].setConnection(false);
-            setChanged();
-            notifyObservers(connections);
+        public BPNode[] remove(int index){
+            BPNode[] returnb = connections.remove(index);
+            returnb[0].setConnection(false,returnb[1]);
+            returnb[1].setConnection(false,returnb[0]);
             return returnb;
         }
         
         public boolean remove(Object o){
-            boolean returnb = connections.remove(o);
-            BPComponent[] comp = (BPComponent[])o;
-            comp[0].setConnection(false);
-            comp[1].setConnection(false);
-            setChanged();
-            notifyObservers(connections);
+            boolean returnb = connections.remove((BPNode[])o);
+            BPNode[] comp = (BPNode[])o;
+            comp[0].setConnection(false,comp[1]);
+            comp[1].setConnection(false,comp[0]);
             return returnb;
         }
         
     }
-    //public static class Component{}
     
 }
