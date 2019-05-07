@@ -1,3 +1,19 @@
+/*
+ * Copyright 2019 Salvador Vera Franco.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package blueprints.ui;
 
 import blueprints.utils.Resizer;
@@ -16,12 +32,11 @@ import javax.swing.Timer;
 
 /**
  *
- * @author terro
+ * @author Salvador Vera Franco
  */
 public class BPComponent extends JPanel{
         private final HashMap<String,BPNode> input = new HashMap<>();
         private final HashMap<String,BPNode> output = new HashMap<>();
-        private final String name;
         private Timer timer;
         private final Color bckgrd;
         private float dashPhase = 0f;
@@ -33,7 +48,6 @@ public class BPComponent extends JPanel{
         private int state = STATE_WAITING;
         private int laststate = state;
         private final float dash[] = {5.0f,5.0f};
-        private boolean connected=false;
         private Resizer resizer;
         private boolean resize=true;
         private boolean movable=true;
@@ -41,8 +55,7 @@ public class BPComponent extends JPanel{
         private int size = 28;
         private float alpha = 1f;
         private Color shadowcolor = Color.BLACK;
-        public BPComponent(String name) {
-            this.name=name;
+        public BPComponent() {
             this.bckgrd= new Color(0.27f, 0.37f, 0.39f,0.7f);
             setBackground(bckgrd);
             ThreadStroke();
@@ -119,41 +132,12 @@ public class BPComponent extends JPanel{
         public Color getBackgroundColor(){
             return bckgrd;
         }
-        
-        @Override
-        public String getName(){
-            return name;
-        }
-        
-        public boolean isConnected(){
-            return connected;
-        }
-        
-        public void setConnection(boolean connected){
-            this.connected=connected;
-        } 
 
         public void addNode(String id,BPNode node){
             if(node.isInput())
                 input.put(id,node);
             else 
                 output.put(id,node);
-        }
-        
-        public Object getOutputValue(String nodeid){
-            return output.get(nodeid).getValue();
-        }
-        
-        public void setOutputValue(String nodeid,Object value){
-            output.get(nodeid).setValue(value);
-        }
-        
-        public Object getInputValue(String nodeid){
-            return input.get(nodeid).getValue();
-        }
-        
-        public void setInputValue(String nodeid,Object value){
-            input.get(nodeid).setValue(value);
         }
 
         public HashMap<String,BPNode> getInputNodes() {
@@ -164,7 +148,7 @@ public class BPComponent extends JPanel{
             return output;
         }
         
-        public BPViewport getDesktop(){
+        public BPViewport getViewport(){
             return (BPViewport)getParent();
         }
         
@@ -238,7 +222,7 @@ public class BPComponent extends JPanel{
         }
         
         public Rectangle rect;
-        
+        private boolean repaint=false;
         @Override
         public void paint(Graphics g){
             super.paint(g);
@@ -248,7 +232,10 @@ public class BPComponent extends JPanel{
             state(g2d);
             g2d.draw(rect);
             g2d.dispose();
-            getParent().repaint();
+            //stop infinite repaint
+            if(repaint)
+                getParent().repaint();
+            repaint = !repaint;
             rect= new Rectangle(0, 0, getBounds().width, getBounds().height);
         }
 
