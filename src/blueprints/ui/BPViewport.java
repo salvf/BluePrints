@@ -1,13 +1,24 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * Copyright 2019 Salvador Vera Franco.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
 package blueprints.ui;
 
 import blueprints.BPManager;
 import blueprints.utils.Resizer;
-import blueprints.utils.Borders.GlowUtils;
+import blueprints.utils.Borders.BlurUtils;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
@@ -15,11 +26,9 @@ import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.LinearGradientPaint;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.Shape;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
@@ -28,28 +37,30 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Observer;
-import javax.swing.JComponent;
 import javax.swing.JLayeredPane;
 
 /**
  *
- * @author terro
+ * @author Salvador Vera Franco
  */
 public class BPViewport extends JLayeredPane {
 
-        BPManager.Desktop dek_manager;
-        private final List<Shape> nodesin = new ArrayList<>();
-        private final List<Shape> nodesout = new ArrayList<>();
+        BPManager.Viewport view_manager;
+        private final ArrayList<BPNode> innodes= new ArrayList<>();
+        private final ArrayList<BPNode>  outnodes= new ArrayList<>();
         public boolean inAny=false;
        // private boolean drawLine=false;
        // private Point line1,line2;
-        private BPComponent parent = null;
-        private BPComponent child = null;
+        
+        private BPNode parentnode = null;
+        private BPNode childnode = null;
+        
+        private double margin;
 
         public BPViewport() {
-            dek_manager= new BPManager.Desktop(new ArrayList<>(),this); 
+            view_manager= new BPManager.Viewport(new ArrayList<>(),this); 
             setOpaque(true);
+            setDoubleBuffered(true);
             MouseAdapter ma = new MouseAdapter() {
                 private BPComponent dragComponent;
                 private Point clickPoint;
@@ -82,7 +93,7 @@ public class BPViewport extends JLayeredPane {
                            // drawPreLine(inNode);
                             nodetype = 2;
                             setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-                            parent = getBluePrintComponent(e, true);
+                            parentnode = getInputNode(e);
                         }
                         else if(inOutputNode(e))
                         {
@@ -90,7 +101,7 @@ public class BPViewport extends JLayeredPane {
                          //   drawPreLine(inNode);
                             nodetype = 1;
                             setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-                            child = getBluePrintComponent(e, false);
+                            childnode = getOutputNode(e);
                         }
                         else 
                         {
@@ -111,6 +122,7 @@ public class BPViewport extends JLayeredPane {
                         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
                         BPComponent c= (BPComponent)getComponentAt(e.getPoint());
                         Resizer.cursor(e, c);
+                        repaint();
                     }
                     else {
                         inAny=false;
@@ -119,16 +131,15 @@ public class BPViewport extends JLayeredPane {
                 }
                 
                 public void mouseReleased(MouseEvent e) {
-                    
                     if(dragComponent!=null)
                         dragComponent.setState(dragComponent.getLastState());
                     inNode = false;
-                    if(parent!=null && child!=null){
-                        connect(parent, child);
+                    if(parentnode!=null && childnode!=null){
+                        connect(parentnode,childnode);
                         repaint();
                     }
-                    parent = null;
-                    child = null;
+                    parentnode = null;
+                    childnode = null;
                     nodetype=-1;
                     if(inAny)
                         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -148,15 +159,15 @@ public class BPViewport extends JLayeredPane {
                     switch (nodetype) {
                         case 1:
                             if(inInputNode(e)){
-                                parent=getBluePrintComponent(e, true);
+                                parentnode=getInputNode(e);
                             }
-                            else parent = null;
+                            else parentnode = null;
                             break;
                         case 2:
                             if(inOutputNode(e)){
-                                child=getBluePrintComponent(e, false);
+                                childnode=getOutputNode(e);
                             }
-                            else child = null;
+                            else childnode = null;
                             break;
                         default:
                             inNode = false;
@@ -170,30 +181,32 @@ public class BPViewport extends JLayeredPane {
             setBackground(new Color(37, 50, 58));
         }
         
-        public List<BPComponent[]> getConnections(){
-            return dek_manager.getConnections();
+        public List<BPNode[]> getConnections(){
+            return view_manager.getConnections();
+        }
+        
+        private BPNode getInputNode(MouseEvent e){
+            return innodes.stream().parallel().filter((t) -> 
+                t.getGraphNode().contains(e.getPoint()) 
+            ).findFirst().get();
+        }
+        
+        private BPNode getOutputNode(MouseEvent e){
+            return outnodes.stream().parallel().filter((t) -> 
+                t.getGraphNode().contains(e.getPoint()) 
+            ).findFirst().get();
         }
         
         private boolean inInputNode(MouseEvent e){
-            return nodesin.stream().parallel().anyMatch((node)->(node.contains(e.getPoint())));
+            return innodes.stream().parallel().anyMatch((t) -> {
+                return t.getGraphNode().contains(e.getPoint());
+            });
         }
         
         private boolean inOutputNode(MouseEvent e){
-            return nodesout.stream().parallel().anyMatch((node)->(node.contains(e.getPoint())));
-        }
-        
-        private BPComponent getBluePrintComponent(MouseEvent e, boolean isInput){
-            Component comp =null;
-            if(isInput)
-                comp= getComponentAt(e.getX()-50, e.getY());
-            else 
-                comp= getComponentAt(e.getX()+50, e.getY());
-            
-            if(comp!=null)
-                return (BPComponent) comp;
-            else 
-                return null;
-            
+            return outnodes.stream().parallel().anyMatch((t) -> {
+                return t.getGraphNode().contains(e.getPoint());
+            });
         }
         
         private boolean inComponent(MouseEvent e){
@@ -201,54 +214,73 @@ public class BPViewport extends JLayeredPane {
             return (c != BPViewport.this && c != null);
         }
         
-        public void connect(BPComponent parent, BPComponent child) {
-            if(parent!=child){
-                dek_manager.add(new BPComponent[]{parent, child});
+        public void connect(BPNode Nparent, BPNode Nchild) {
+            if(Nparent!=Nchild){
+                view_manager.add(new BPNode[]{Nparent, Nchild});
             }
         }
         
-        public void addObserver(Observer o){
-           dek_manager.addObserver(o);
+        public BPManager.Viewport getViewManager(){
+           return view_manager;
         }
         
-        public BPManager.Desktop getManager(){
-           return dek_manager;
-        }
-        
-        public void addnConnect(BPComponent parent, BPComponent child) {
-            if (parent.getParent() != this) 
-                add(parent);
-            
-            if (child.getParent() != this) 
-                add(child);
-            
-            if(parent!=child)
-                dek_manager.add(new BPComponent[]{parent, child});
-        }
-
-        public void addComponent(JComponent component){
-            add(component);
-        }
+        private double count = 1;
 
         @Override
-        protected void paintComponent(Graphics g) {
+        public void paintComponent(Graphics g) {
             super.paintComponent(g);
+
             Graphics2D g2d = (Graphics2D) g.create();
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            nodesin.clear();
-            nodesout.clear();
+            innodes.clear();
+            outnodes.clear();
             
-            dek_manager.getConnections().stream().parallel().map((connection) -> {
-                Rectangle innerparent = connection[0].getBounds();
-                Rectangle innerchild = connection[1].getBounds();
+            //Draw Nodes
+            Arrays.stream(getComponents()).forEach((comp) -> {
+                Rectangle bound = comp.getBounds();
+                BPComponent bpc =(BPComponent)comp;
+                if(bpc.isShadow())
+                    blurshadow(g2d,bpc);
+                g2d.setColor(new Color(161 , 201 , 200));
+                double xw = bound.getX()+bound.getWidth()+20;
+                double xin = bound.getX() - 20;
+                int size =0;
+                if(bpc.getOutputNodes().size()>0){
+                    size =(bpc.getOutputNodes().size()+1);
+                    margin=(bound.getHeight()/size);
+                    bpc.getOutputNodes().entrySet().forEach((t) -> {
+                        g2d.fill(t.getValue().setGraphNode(centeredNode(
+                           xw, bound.getY()+(margin*count), 10)));
+                        outnodes.add(t.getValue());
+                        count++;
+                    });
+                    count=1;
+                }    
+                if (bpc.getInputNodes().size() > 0){
+                    size =(bpc.getInputNodes().size()+1);
+                    margin=(bound.getHeight()/size);
+                    bpc.getInputNodes().entrySet().forEach((t) -> {
+                        g2d.fill(t.getValue().setGraphNode(centeredNode(
+                        xin, bound.getY()+(margin*count), 10)));
+                        innodes.add(t.getValue());
+                        count++;
+                    });
+                    count=1;
+                }  
+            });
+            
+            //Draw Connections  
+            view_manager.getConnections().stream().parallel().map((connection) -> {
+                Rectangle innerparent = connection[1].getGraphNode().getBounds();
+                Rectangle innerchild = connection[0].getGraphNode().getBounds();
                 GeneralPath path = new GeneralPath();
                 double Xcenter=(innerparent.getCenterX()+innerchild.getCenterX())/2;
-                double Xout = innerparent.getX()+innerparent.getWidth()+20;
-                double Xin = innerchild.getX() - 20;
+                double Xout = innerparent.getX()+innerparent.getWidth();
+                double Xin = innerchild.getX();
                 double xs[]={Xout,Xcenter,Xcenter,Xin};
                 double ys[]={innerparent.getCenterY(),innerchild.getCenterY()};
                 path.moveTo(xs[0], ys[0]);
-                
+
                 if( xs[0] <= xs[3] || xs[3] > xs[0]){
                     xs[1]=Xcenter;
                     xs[2]=xs[1];
@@ -261,32 +293,16 @@ public class BPViewport extends JLayeredPane {
                 return path;
             }).forEachOrdered((path) -> {
                 g2d.setColor(new Color(41,200,114));
-                g2d.setStroke(new BasicStroke(1.5f));
+                g2d.setStroke(new BasicStroke(5.0f));
                 g2d.draw(path);
             });
-            
-            Arrays.stream(getComponents()).parallel().forEachOrdered((comp) -> {
-                Rectangle bound = comp.getBounds();
-                BPComponent bpc =(BPComponent)comp;
-                if(bpc.isShadow())
-                    glowshadow(g2d,bpc);
-                g2d.setColor(new Color(161 , 201 , 200));
-                double Xout = bound.getX()+bound.getWidth()+20;
-                double Xin = bound.getX() - 20;
-                    if(bpc.getOutputNodes().size()>0)
-                        drawCenteredCircle(g2d, (int)Xout, (int)bound.getCenterY(), 10, true);
-                    if (bpc.getInputNodes().size() > 0)
-                      drawCenteredCircle(g2d, (int) Xin, (int) bound.getCenterY(), 10, false);
-            });
-            
-            //if(drawLine){            }
-            
-           g2d.dispose();
+            //if(drawLine){            } 
+            g2d.dispose();
         }
         
         
         
-        public void glowshadow(Graphics2D g2d,BPComponent comp){
+        public void blurshadow(Graphics2D g2d,BPComponent comp){
             int width = comp.getBounds().width;
             int height = comp.getBounds().height;
             Color color = comp.getShadowColor();
@@ -294,19 +310,14 @@ public class BPViewport extends JLayeredPane {
             float alpha = comp.getShadowAlpha();
             int dx= comp.getBounds().x-size-(size/4); 
             int dy= comp.getBounds().y-size-(size/4);
-            BufferedImage img = GlowUtils.generateGlow(width, height, size, color, alpha);
+            BufferedImage img = BlurUtils.generateBlur(width, height, size, color, alpha);
             g2d.drawImage(img, dx, dy, comp);
         }
 
-        public void drawCenteredCircle(Graphics2D g, int x, int y, int r, boolean isNodeInput) {
+        public Ellipse2D.Double centeredNode(double x, double y, int r) {
             x = x - (r / 2);
             y = y - (r / 2);
-            Shape circle = new Ellipse2D.Double(x, y, r, r);
-            if(isNodeInput)
-                nodesin.add(circle);
-            else 
-                nodesout.add(circle);
-            g.fill(circle);
+            return new Ellipse2D.Double(x, y, r, r);
         }
         
         @Override
