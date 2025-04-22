@@ -225,7 +225,7 @@ public class BPViewport extends JLayeredPane {
                                 // Validate connection compatibility
                                 if (tempConnectionStart.canConnectTo(clickedPoint)) {
                                     // Create a connection between two points
-                                    connections.add(new Connection(tempConnectionStart, clickedPoint));
+                                    connect(tempConnectionStart, clickedPoint);
                                 } else {
                                     /*
                                      * System.out.println("Conexión inválida: " +
