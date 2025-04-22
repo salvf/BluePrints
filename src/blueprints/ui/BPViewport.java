@@ -18,7 +18,8 @@ package blueprints.ui;
 
 import blueprints.BPManager;
 import blueprints.utils.Resizer;
-import blueprints.utils.Borders.BlurUtils;
+import java.awt.geom.Point2D;
+
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
@@ -31,13 +32,16 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.geom.Ellipse2D;
+import java.awt.event.MouseMotionAdapter;
+import java.awt.geom.CubicCurve2D;
 import java.awt.geom.GeneralPath;
-import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+
 import javax.swing.JLayeredPane;
+import javax.swing.SwingUtilities;
 
 /**
  *
@@ -45,288 +49,421 @@ import javax.swing.JLayeredPane;
  */
 public class BPViewport extends JLayeredPane {
 
-        BPManager.Viewport view_manager;
-        private final ArrayList<BPNode> innodes= new ArrayList<>();
-        private final ArrayList<BPNode>  outnodes= new ArrayList<>();
-        public boolean inAny=false;
-       // private boolean drawLine=false;
-       // private Point line1,line2;
-        
-        private BPNode parentnode = null;
-        private BPNode childnode = null;
-        
-        private double margin;
+    BPManager.Viewport view_manager;
+    public boolean inAny = false;
 
-        public BPViewport() {
-            view_manager= new BPManager.Viewport(new ArrayList<>(),this); 
-            setOpaque(true);
-            setDoubleBuffered(true);
-            MouseAdapter ma = new MouseAdapter() {
-                private BPComponent dragComponent;
-                private Point clickPoint;
-                private Point offset;
-                private boolean inComponent=false;
-                
-                private boolean inNode=false;
-                private int nodetype = -1;
-                private BPComponent component;
-                
-                public void mousePressed(MouseEvent e) {
-                    if (inComponent(e)) {
-                        component = (BPComponent)getComponentAt(e.getPoint());
-                        dragComponent = component;
-                        dragComponent.setState(BPComponent.STATE_SELECTED);
-                        setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
-                        if(component.isMovable()){
-                            clickPoint = e.getPoint();
-                            int deltaX = clickPoint.x - dragComponent.getX();
-                            int deltaY = clickPoint.y - dragComponent.getY();
-                            offset = new Point(deltaX, deltaY);
-                            inComponent=true;
-                        }
-                    }
-                    else {
-                        inComponent=false;
-                        if(inInputNode(e))
-                        {
-                            inNode = true;
-                           // drawPreLine(inNode);
-                            nodetype = 2;
-                            setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-                            parentnode = getInputNode(e);
-                        }
-                        else if(inOutputNode(e))
-                        {
-                            inNode = true;
-                         //   drawPreLine(inNode);
-                            nodetype = 1;
-                            setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-                            childnode = getOutputNode(e);
-                        }
-                        else 
-                        {
-                            inNode = false; 
-                           // drawPreLine(inNode);
-                        }
-                    }
-                }
-                
-                public void mouseMoved(MouseEvent e) {
-                    if(inInputNode(e) || inOutputNode(e) )
-                    {
-                        inAny=true;
-                        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                    }
-                    else if( inComponent(e)){
-                        inAny=true;
-                        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                        BPComponent c= (BPComponent)getComponentAt(e.getPoint());
-                        Resizer.cursor(e, c);
-                        repaint();
-                    }
-                    else {
-                        inAny=false;
-                        setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
-                    }
-                }
-                
-                public void mouseReleased(MouseEvent e) {
-                    if(dragComponent!=null)
-                        dragComponent.setState(dragComponent.getLastState());
-                    inNode = false;
-                    if(parentnode!=null && childnode!=null){
-                        connect(parentnode,childnode);
-                        repaint();
-                    }
-                    parentnode = null;
-                    childnode = null;
-                    nodetype=-1;
-                    if(inAny)
-                        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                    else
-                        setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+    private double zoomFactor = 1.0; // Nivel de zoom inicial
+
+    /** PRUEBAS */
+    private ArrayList<BPComponent> components = new ArrayList<>();
+    private ArrayList<Connection> connections = new ArrayList<>();
+    private BPComponent selectedComponent = null;
+    private Point lastMousePos;
+    // private double zoomFactor = 1.0;
+    private double panX = 0, panY = 0;
+    private BPNode tempConnectionStart = null;
+    private Connection highlightedConnection = null;
+
+    /** PRUEBAS */
+    public BPViewport() {
+        view_manager = new BPManager.Viewport(new ArrayList<>(), this);
+        setOpaque(true);
+        setDoubleBuffered(true);
+        /*
+         * MouseAdapter ma = new MouseAdapter() {
+         * private BPComponent dragComponent;
+         * private Point clickPoint;
+         * private Point offset;
+         * private boolean inComponent = false;
+         * 
+         * private boolean inNode = false;
+         * private int nodetype = -1;
+         * private BPComponent component;
+         * 
+         * public void mousePressed(MouseEvent e) {
+         * if (inComponent(e)) {
+         * component = (BPComponent) getComponentAt(e.getPoint());
+         * dragComponent = component;
+         * dragComponent.setState(BPComponent.STATE_SELECTED);
+         * setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+         * if (component.isMovable()) {
+         * clickPoint = e.getPoint();
+         * int deltaX = clickPoint.x - dragComponent.getX();
+         * int deltaY = clickPoint.y - dragComponent.getY();
+         * offset = new Point(deltaX, deltaY);
+         * inComponent = true;
+         * }
+         * } else {
+         * inComponent = false;
+         * if (inInputNode(e)) {
+         * inNode = true;
+         * // drawPreLine(inNode);
+         * nodetype = 2;
+         * setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+         * parentnode = getInputNode(e);
+         * } else if (inOutputNode(e)) {
+         * inNode = true;
+         * // drawPreLine(inNode);
+         * nodetype = 1;
+         * setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+         * childnode = getOutputNode(e);
+         * } else {
+         * inNode = false;
+         * // drawPreLine(inNode);
+         * }
+         * }
+         * }
+         * 
+         * public void mouseMoved(MouseEvent e) {
+         * if (inInputNode(e) || inOutputNode(e)) {
+         * inAny = true;
+         * setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+         * } else if (inComponent(e)) {
+         * inAny = true;
+         * setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+         * BPComponent c = (BPComponent) getComponentAt(e.getPoint());
+         * Resizer.cursor(e, c);
+         * repaint();
+         * } else {
+         * inAny = false;
+         * setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+         * }
+         * }
+         * 
+         * public void mouseReleased(MouseEvent e) {
+         * if (dragComponent != null)
+         * dragComponent.setState(dragComponent.getLastState());
+         * inNode = false;
+         * if (parentnode != null && childnode != null) {
+         * connect(parentnode, childnode);
+         * repaint();
+         * }
+         * parentnode = null;
+         * childnode = null;
+         * nodetype = -1;
+         * if (inAny)
+         * setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+         * else
+         * setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+         * }
+         * 
+         * public void mouseDragged(MouseEvent e) {
+         * if (inComponent) {
+         * int mouseX = e.getX();
+         * int mouseY = e.getY();
+         * int xDelta = mouseX - offset.x;
+         * int yDelta = mouseY - offset.y;
+         * dragComponent.setLocation(xDelta, yDelta);
+         * repaint();
+         * }
+         * switch (nodetype) {
+         * case 1:
+         * if (inInputNode(e)) {
+         * parentnode = getInputNode(e);
+         * } else
+         * parentnode = null;
+         * break;
+         * case 2:
+         * if (inOutputNode(e)) {
+         * childnode = getOutputNode(e);
+         * } else
+         * childnode = null;
+         * break;
+         * default:
+         * inNode = false;
+         * break;
+         * }
+         * }
+         * };
+         * addMouseListener(ma);
+         * addMouseMotionListener(ma);
+         */
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                lastMousePos = e.getPoint();
+                /*
+                 * // Convert screen coordinates to world coordinates from scale value
+                 * Point2D transformed = screenToWorld(e.getPoint());
+                 * int mx = (int) transformed.getX();
+                 * int my = (int) transformed.getY();
+                 * 
+                 */
+
+                // Check if a connection was clicked
+                if (highlightedConnection != null && SwingUtilities.isLeftMouseButton(e)) {
+                    connections.remove(highlightedConnection);
+                    highlightedConnection = null;
+                    repaint();
+                    return;
                 }
 
-                public void mouseDragged(MouseEvent e) {
-                    if(inComponent){
-                        int mouseX = e.getX();
-                        int mouseY = e.getY();
-                        int xDelta = mouseX - offset.x;
-                        int yDelta = mouseY - offset.y;
-                        dragComponent.setLocation(xDelta, yDelta);
-                        repaint();
+                BPNode clickedPoint = null;
+                
+                List<BPComponent> bpComponents = Arrays.stream(getComponents())
+                        .filter(component -> component instanceof BPComponent)
+                        .map(component -> (BPComponent) component)
+                        .collect(Collectors.toList());
+                        
+                for (BPComponent bpc : bpComponents) {
+                    // Check if the mouse is over a Blueprint component
+                    if (bpc.getBounds().contains(lastMousePos) && bpc.isMovable()) {
+                        selectedComponent = bpc;
+                       // inAny = true;
+                        return;
                     }
-                    switch (nodetype) {
-                        case 1:
-                            if(inInputNode(e)){
-                                parentnode=getInputNode(e);
+
+                    // clickedPoint = component.getConnectionPointAt(mx, my);
+                    clickedPoint = bpc.getNodeAt((int) lastMousePos.getX(), (int) lastMousePos.getY());
+                    if (clickedPoint != null) {
+
+                        if (SwingUtilities.isRightMouseButton(e)) {
+                           // inAny = true;
+                            if (tempConnectionStart == null) {
+                                tempConnectionStart = clickedPoint;
+                            } else {
+                                // Validate connection compatibility
+                                if (tempConnectionStart.canConnectTo(clickedPoint)) {
+                                    // Create a connection between two points
+                                    connections.add(new Connection(tempConnectionStart, clickedPoint));
+                                } else {
+                                    /*
+                                     * System.out.println("Conexión inválida: " +
+                                     * tempConnectionStart.connectionType + "-" + tempConnectionStart.dataType +
+                                     * " no puede conectarse con " +
+                                     * clickedPoint.connectionType + "-" + clickedPoint.dataType);
+                                     */
+                                }
+                                tempConnectionStart = null;
                             }
-                            else parentnode = null;
-                            break;
-                        case 2:
-                            if(inOutputNode(e)){
-                                childnode=getOutputNode(e);
-                            }
-                            else childnode = null;
-                            break;
-                        default:
-                            inNode = false;
-                            break;
+                            repaint();
+                            return;
+                        }
+                        break;
                     }
                 }
-            };
+                //dispatchDesktopEvent(e);
+                // selectedComponent = null;
+            }
 
-            addMouseListener(ma);
-            addMouseMotionListener(ma);
-            setBackground(new Color(37, 50, 58));
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                selectedComponent = null;
+                inAny = false;
+            }
+        });
+
+        addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                Point current = e.getPoint();
+                try {
+                    double dx = (current.x - lastMousePos.x); // / zoomFactor;
+                    double dy = (current.y - lastMousePos.y); // / zoomFactor;
+                    if (selectedComponent != null) {
+                        inAny = true;
+                        int selectedNodeX = selectedComponent.getX();
+                        int selectedNodeY = selectedComponent.getY();
+                        int xDelta = selectedNodeX + (int) dx;
+                        int yDelta = selectedNodeY + (int) dy;
+    
+                        selectedComponent.setLocation(xDelta, yDelta);
+                        repaint();
+    
+                        /*
+                         * Update connection points
+                         * for (BPNode cp : selectedComponent.getNodes().values()) {
+                         * cp.updatePosition();
+                         * }
+                         */
+                    } else {
+                      //  panX += (current.x - lastMousePos.x);
+                      //  panY += (current.y - lastMousePos.y);
+                    }
+    
+                    lastMousePos = current;
+                    repaint();
+                } catch (NullPointerException exception) {
+                    // TODO: handle exception
+                }
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                /*
+                 * / Point2D transformed = screenToWorld(e.getPoint());
+                 * int mx = (int) transformed.getX();
+                 * int my = (int) transformed.getY();
+                 */
+                // Check if mouse is over a connection
+                Connection prevHighlighted = highlightedConnection;
+                highlightedConnection = null;
+
+                for (Connection conn : connections) {
+                    if (conn.isNearPoint((int) e.getPoint().getX(), (int) e.getPoint().getY(), 5.0)) {
+                        highlightedConnection = conn;
+                        conn.isHighlighted = true;
+                        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+                        break;
+                    } else {
+                        conn.isHighlighted = false;
+                    }
+                }
+
+                // If no connection is highlighted, reset cursor and status
+                if (highlightedConnection == null) {
+                    setCursor(Cursor.getDefaultCursor());
+                }
+
+                // Update temporary connection end point for preview
+                if (tempConnectionStart != null) {
+                    lastMousePos = e.getPoint(); // Update the last mouse position for the curve preview
+                }
+
+                // Repaint only if highlighting changed or preview is active
+                if (prevHighlighted != highlightedConnection || tempConnectionStart != null) {
+                    repaint();
+                }
+            }
+        });
+
+        /*
+         * addMouseWheelListener(e -> {
+         * double delta = 0.1; // Zoom increment
+         * double oldZoomFactor = zoomFactor;
+         * 
+         * if (e.getPreciseWheelRotation() < 0) {
+         * zoomFactor = Math.min(zoomFactor + delta, 5.0); // Maximum zoom level
+         * } else {
+         * zoomFactor = Math.max(zoomFactor - delta, 0.1); // Minimum zoom level
+         * }
+         * 
+         * // Update components only if zoom factor has changed
+         * if (zoomFactor != oldZoomFactor) {
+         * updateComponentSizes();
+         * }
+         * });
+         */
+        setBackground(new Color(37, 50, 58));
+    }
+
+    private void dispatchDesktopEvent(MouseEvent e) {
+        Component parent = SwingUtilities.getAncestorOfClass(BPDesktop.class, BPViewport.this);
+        if (parent instanceof BPDesktop) {
+            MouseEvent desktopEvent = SwingUtilities.convertMouseEvent(BPViewport.this, e, parent);
+            parent.dispatchEvent(desktopEvent);
         }
-        
-        public List<BPNode[]> getConnections(){
-            return view_manager.getConnections();
+    }
+
+    public List<BPNode[]> getConnections() {
+        return view_manager.getConnections();
+    }
+
+    private boolean inComponent(MouseEvent e) {
+        Component c = getComponentAt(e.getPoint());
+        return (c != BPViewport.this && c != null);
+    }
+
+    
+    public void connect(BPNode Nparent, BPNode Nchild) {
+        connections.add(new Connection(Nparent, Nchild));
+    }
+
+    public void disconnect(BPNode Nparent, BPNode Nchild) {
+        connections.removeIf((conn) -> {
+            return conn.start == Nparent && conn.end == Nchild;
+        });
+    }
+
+    public BPManager.Viewport getViewManager() {
+        return view_manager;
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Aplicar zoom al Graphics2D
+        // g2d.scale(zoomFactor, zoomFactor);
+
+        // Draw Components, Nodes and conections
+        connections.forEach((conn) -> {
+            conn.draw(g2d);
+        });
+
+        Arrays.stream(getComponents()).forEach((comp) -> {
+            BPComponent bpc = (BPComponent) comp;
+            bpc.draw(g2d); // Llamar al método draw de BPComponent
+        });
+
+        drawTemporaryConnection(g2d);
+        g2d.dispose();
+    }
+
+    private void drawTemporaryConnection(Graphics2D g2) {
+        // Draw temporary connection curve if creating a connection
+        if (tempConnectionStart != null && lastMousePos != null) {
+            // Point2D p = screenToWorld(lastMousePos);
+            Point2D p = lastMousePos.getLocation();
+            int mx = (int) p.getX();
+            int my = (int) p.getY();
+
+            // Create temporary end point for drawing
+            Point2D startDir = tempConnectionStart.getDirectionVector();
+            double ctrlX1 = tempConnectionStart.getX() + startDir.getX();
+
+            // Since we don't have an end connection point yet, just use mouse position and
+            // invert the start direction
+            double ctrlX2 = mx - startDir.getX();
+
+            CubicCurve2D curve = new CubicCurve2D.Double(
+                    tempConnectionStart.getX(), tempConnectionStart.getY(),
+                    ctrlX1, tempConnectionStart.getY(),
+                    ctrlX2, my,
+                    mx, my);
+
+            // Draw with the color of the data type
+            g2.setColor(Color.LIGHT_GRAY);
+            g2.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 0, new float[] { 5 }, 0));
+            g2.draw(curve);
         }
-        
-        private BPNode getInputNode(MouseEvent e){
-            return innodes.stream().parallel().filter((t) -> 
-                t.getGraphNode().contains(e.getPoint()) 
-            ).findFirst().get();
-        }
-        
-        private BPNode getOutputNode(MouseEvent e){
-            return outnodes.stream().parallel().filter((t) -> 
-                t.getGraphNode().contains(e.getPoint()) 
-            ).findFirst().get();
-        }
-        
-        private boolean inInputNode(MouseEvent e){
-            return innodes.stream().parallel().anyMatch((t) -> {
-                return t.getGraphNode().contains(e.getPoint());
-            });
-        }
-        
-        private boolean inOutputNode(MouseEvent e){
-            return outnodes.stream().parallel().anyMatch((t) -> {
-                return t.getGraphNode().contains(e.getPoint());
-            });
-        }
-        
-        private boolean inComponent(MouseEvent e){
-           Component c = getComponentAt(e.getPoint());
-            return (c != BPViewport.this && c != null);
-        }
-        
-        public void connect(BPNode Nparent, BPNode Nchild) {
-            if(Nparent!=Nchild){
-                view_manager.add(new BPNode[]{Nparent, Nchild});
+    }
+
+    @Override
+    public Dimension getPreferredSize() {
+        return new Dimension(7680, 4320);
+    }
+
+    /**
+     * Adjusts the size and position of components based on the zoom level.
+     */
+    private void updateComponentSizes() {
+        boolean componentsUpdated = false;
+
+        for (Component comp : getComponents()) {
+            Rectangle bounds = comp.getBounds();
+
+            // Calculate new bounds based on zoom factor
+            int newX = (int) (bounds.x * zoomFactor);
+            int newY = (int) (bounds.y * zoomFactor);
+            int newWidth = (int) (bounds.width * zoomFactor);
+            int newHeight = (int) (bounds.height * zoomFactor);
+
+            // Update component bounds only if they have changed
+            if (bounds.x != newX || bounds.y != newY || bounds.width != newWidth || bounds.height != newHeight) {
+                comp.setBounds(newX, newY, newWidth, newHeight);
+                componentsUpdated = true;
             }
         }
-        
-        public BPManager.Viewport getViewManager(){
-           return view_manager;
-        }
-        
-        private double count = 1;
 
-        @Override
-        public void paintComponent(Graphics g) {
-            super.paintComponent(g);
-
-            Graphics2D g2d = (Graphics2D) g.create();
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            innodes.clear();
-            outnodes.clear();
-            
-            //Draw Nodes
-            Arrays.stream(getComponents()).forEach((comp) -> {
-                Rectangle bound = comp.getBounds();
-                BPComponent bpc =(BPComponent)comp;
-                if(bpc.isShadow())
-                    blurshadow(g2d,bpc);
-                g2d.setColor(new Color(161 , 201 , 200));
-                double xw = bound.getX()+bound.getWidth()+20;
-                double xin = bound.getX() - 20;
-                int size =0;
-                if(bpc.getOutputNodes().size()>0){
-                    size =(bpc.getOutputNodes().size()+1);
-                    margin=(bound.getHeight()/size);
-                    bpc.getOutputNodes().entrySet().forEach((t) -> {
-                        g2d.fill(t.getValue().setGraphNode(centeredNode(
-                           xw, bound.getY()+(margin*count), 10)));
-                        outnodes.add(t.getValue());
-                        count++;
-                    });
-                    count=1;
-                }    
-                if (bpc.getInputNodes().size() > 0){
-                    size =(bpc.getInputNodes().size()+1);
-                    margin=(bound.getHeight()/size);
-                    bpc.getInputNodes().entrySet().forEach((t) -> {
-                        g2d.fill(t.getValue().setGraphNode(centeredNode(
-                        xin, bound.getY()+(margin*count), 10)));
-                        innodes.add(t.getValue());
-                        count++;
-                    });
-                    count=1;
-                }  
-            });
-            
-            //Draw Connections  
-            view_manager.getConnections().stream().parallel().map((connection) -> {
-                Rectangle innerparent = connection[1].getGraphNode().getBounds();
-                Rectangle innerchild = connection[0].getGraphNode().getBounds();
-                GeneralPath path = new GeneralPath();
-                double Xcenter=(innerparent.getCenterX()+innerchild.getCenterX())/2;
-                double Xout = innerparent.getX()+innerparent.getWidth();
-                double Xin = innerchild.getX();
-                double xs[]={Xout,Xcenter,Xcenter,Xin};
-                double ys[]={innerparent.getCenterY(),innerchild.getCenterY()};
-                path.moveTo(xs[0], ys[0]);
-
-                if( xs[0] <= xs[3] || xs[3] > xs[0]){
-                    xs[1]=Xcenter;
-                    xs[2]=xs[1];
-                }
-                else{
-                    xs[1]=(xs[0]-Xcenter)+xs[0];
-                    xs[2]=(xs[3]-Xcenter)+xs[3];
-                }
-                path.curveTo(xs[1], ys[0], xs[2], ys[1], xs[3], ys[1]);
-                return path;
-            }).forEachOrdered((path) -> {
-                g2d.setColor(new Color(41,200,114));
-                g2d.setStroke(new BasicStroke(5.0f));
-                g2d.draw(path);
-            });
-            //if(drawLine){            } 
-            g2d.dispose();
+        // Revalidate and repaint only if components were updated
+        if (componentsUpdated) {
+            revalidate();
+            repaint();
         }
-        
-        
-        
-        public void blurshadow(Graphics2D g2d,BPComponent comp){
-            int width = comp.getBounds().width;
-            int height = comp.getBounds().height;
-            Color color = comp.getShadowColor();
-            int size = comp.getShadowSize();
-            float alpha = comp.getShadowAlpha();
-            int dx= comp.getBounds().x-size-(size/4); 
-            int dy= comp.getBounds().y-size-(size/4);
-            BufferedImage img = BlurUtils.generateBlur(width, height, size, color, alpha);
-            g2d.drawImage(img, dx, dy, comp);
-        }
-
-        public Ellipse2D.Double centeredNode(double x, double y, int r) {
-            x = x - (r / 2);
-            y = y - (r / 2);
-            return new Ellipse2D.Double(x, y, r, r);
-        }
-        
-        @Override
-        public Dimension getPreferredSize() {
-            return new Dimension(7680, 4320);
-        }
-       /* private void drawPreLine(boolean drawLine){
-            this.drawLine=drawLine;
-            
-        }*/
-
     }
+}
